@@ -12,7 +12,10 @@ def _auth(x_api_key: str | None = Header(default=None)):
     if settings.API_KEY and x_api_key != settings.API_KEY:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-@router.get("/{room_id}/top-slide", response_model=TopSlideReport)
+@router.get("/{room_id}/top-slide", response_model=TopSlideReport,
+    summary="질문이 가장 많았던 슬라이드 조회",
+    description="roomId에 해당하는 발표에서 **가장 질문이 많았던 슬라이드**와 그 슬라이드의 질문들을 반환합니다.")
+
 async def top_slide(
     room_id: str,
     latest_first: bool = Query(False, description="질문 목록을 최신순으로 정렬"),
