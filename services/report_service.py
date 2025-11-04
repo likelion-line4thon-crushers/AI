@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)  # 모듈 로거 등록
 SLIDE_ZSET_PATTERN = "room:{roomId}:page:*:questions"
 QUESTION_HASH_FMT = "room:{roomId}:question:{qid}"
 
-## 🔹 Redis에서 특정 패턴(room:{roomId}:page:*:questions)에 맞는 모든 키를 스캔하는 함수
+##  Redis에서 특정 패턴(room:{roomId}:page:*:questions)에 맞는 모든 키를 스캔하는 함수
 ##     - Redis의 SCAN 명령을 사용해서 슬라이드별 질문 목록 키(ZSET)들을 찾음
 ##     - 한 번에 너무 많은 키를 읽지 않기 위해 count 단위로 반복 스캔
 ##     - 결과: ["room:...:page:1:questions", "room:...:page:2:questions", ...]
