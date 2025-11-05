@@ -1,0 +1,70 @@
+name: Deploy FastAPI to EC2 (Direct Build)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "Dockerfile"
+      - "requirements.txt"
+      - "main.py"
+      - "config/**"
+      - "core/**"
+      - "exception/**"
+      - "models/**"
+      - "routers/**"
+      - "services/**"
+      - ".github/workflows/deploy-fastapi.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # (루트 구조이므로 move 단계 불필요)
+
+      - name: Copy files to EC2 (root-based layout)  # [수정]
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          source: |
+            Dockerfile,
+            requirements.txt,
+            main.py,
+            config/**,
+            core/**,
+            exception/**,
+            models/**,
+            routers/**,
+            services/**
+          target: "/home/ubuntu/Boini/fastapi"
+          overwrite: true
+          strip_components: 0
+
+      - name: Build & Restart FastAPI via Docker Compose
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          script: |
+            set -e
+            cd /home/ubuntu/Boini
+            docker compose config >/dev/null
+            docker compose up -d --build fastapi
+            docker exec nginx-container nginx -t
+            docker exec nginx-container nginx -s reload
+            set +e
+            curl -fsS https://api.boini.shop/ai/healthz
+            if [ $? -ne 0 ]; then
+              echo "::error::Health check failed. Showing fastapi logs..."
+              docker logs --tail=200 fastapi-container || true
+              exit 1
+            fi
+            echo "Deploy OK"
