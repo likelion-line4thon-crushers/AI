@@ -1,0 +1,20 @@
+# 버전관리 제외 파일
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# 환경 설정
+.env
+
+# IDE 설정
+.vscode
+.idea
+
+# 테스트 / 임시파일
+*.log
+*.tmp
+.DS_Store
