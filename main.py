@@ -1,11 +1,19 @@
-# main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import logging
+from exception.errors import AppException, ErrorResponse, ReportErrorCode
+from redis.exceptions import RedisError
+from fastapi.responses import JSONResponse
 
 from config.settings import settings
 from core.redis import get_redis, close_redis
 from routers.report import router as report_router
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +45,41 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(report_router)
+
+# errors.py에 정의된 타입을 사용
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException):
+    err = exc.error
+    body = ErrorResponse(
+        code=err.code,
+        message=err.message,
+        detail=exc.detail,
+        path=str(request.url.path),
+    )
+    return JSONResponse(status_code=err.http_status, content=body.model_dump())
+
+@app.exception_handler(RedisError)
+async def redis_exception_handler(request: Request, exc: RedisError):
+    err = ReportErrorCode.REDIS_ERROR
+    body = ErrorResponse(
+        code=err.code,
+        message=err.message,
+        detail=str(exc),
+        path=str(request.url.path),
+    )
+    return JSONResponse(status_code=err.http_status, content=body.model_dump())
+
+@app.exception_handler(Exception)  # [수정]
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logging.exception("Unhandled exception", exc_info=exc)
+    err = ReportErrorCode.UNKNOWN
+    body = ErrorResponse(
+        code=err.code,
+        message=err.message,
+        detail=str(exc),
+        path=str(request.url.path),
+    )
+    return JSONResponse(status_code=err.http_status, content=body.model_dump())
 
 # 헬스체크
 @app.get("/healthz")
