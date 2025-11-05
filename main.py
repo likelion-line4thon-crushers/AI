@@ -32,7 +32,11 @@ async def lifespan(app: FastAPI):
     await close_redis()
     print("[shutdown] 🧹 Redis connection closed")
 
-app = FastAPI(title=settings.APP_NAME, lifespan=lifespan)
+app = FastAPI(
+    title=settings.APP_NAME,
+    lifespan=lifespan,
+    root_path="/ai",
+)
 
 # CORS 설정
 app.add_middleware(
@@ -69,7 +73,7 @@ async def redis_exception_handler(request: Request, exc: RedisError):
     )
     return JSONResponse(status_code=err.http_status, content=body.model_dump())
 
-@app.exception_handler(Exception)  # [수정]
+@app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
     logging.exception("Unhandled exception", exc_info=exc)
     err = ReportErrorCode.UNKNOWN
