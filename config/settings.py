@@ -4,10 +4,12 @@ from typing import List
 class Settings(BaseSettings):
     APP_NAME: str = "Boini AI Report"
     API_PREFIX: str = "/report"
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = "redis://redis:6379/0"
     ALLOW_ORIGINS: str = (
-        "http://localhost:8080"
-        "http://localhost:5173"
+        "http://localhost:8080, "
+        "http://localhost:5173, "
+        "https://boini.shop, "
+        "https://api.boini.shop"
     )
 
     class Config:
