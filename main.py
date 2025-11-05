@@ -21,12 +21,12 @@ async def lifespan(app: FastAPI):
     redis = await get_redis()
     try:
         await redis.ping()
-        print("[startup] ✅ Redis connected successfully")
+        print("[startup] Redis 연결 성공")
     except Exception as e:
-        print(f"[startup] ❌ Redis connection failed: {e}")
+        print(f"[startup] Redis 연결 실패: {e}")
         raise
 
-    yield  # 👉 여기까지 실행되면 앱이 '정상 구동 중'
+    yield  # 여기까지 실행되면 앱이 '정상 구동 중'
 
     # Shutdown
     await close_redis()
