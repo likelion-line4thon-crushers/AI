@@ -13,3 +13,4 @@ class TopSlideReport(BaseModel):
     slide: int
     totalQuestions: int
     questions: List[Question]
+    summary: Optional[str] = None
