@@ -96,7 +96,7 @@ async def get_top_slide_report(
                 logger.debug(f"[리포트] 만료된 질문(qid={qid}) 건너뜀")
                 continue
             try:
-                questions.append(  # [수정] 괄호 정리
+                questions.append(
                     Question(
                         id=qid,
                         slide=int(row.get("slide", slide_no)),
@@ -119,13 +119,13 @@ async def get_top_slide_report(
             roomId=room_id, slide=slide_no, totalQuestions=top_count, questions=questions, summary=summary_txt,
         )
 
-    except RedisError as e:  # [수정] except 블록 들여쓰기/위치 수정
+    except RedisError as e:
         logger.error(f"[리포트] Redis 오류: {e}")
         raise AppException(ReportErrorCode.REDIS_ERROR, detail=str(e))
 
     except AppException:
-        raise  # [수정] 이미 표준 예외로 변환된 경우 그대로 전파
+        raise
 
-    except Exception as e:  # [수정]
+    except Exception as e:
         logger.exception(f"[리포트] 알 수 없는 오류 발생: {e}")
         raise AppException(ReportErrorCode.UNKNOWN, detail=str(e))
