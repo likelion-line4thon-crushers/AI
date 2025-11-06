@@ -8,12 +8,12 @@ logger = logging.getLogger(__name__)
 def _build_prompt(lines: List[str], max_lines: int = 3) -> str:
     joined = "\n".join(f"- {s}" for s in lines if s)
     return (
-        "다음은 발표 중 청중 질문 목록입니다.\n"
-        "겹치는 내용은 묶어 핵심만 한국어로 요약해 주세요.\n"
-        f"출력은 최대 {max_lines}줄, 문장형으로 간결하게.\n\n"
-        f"{joined}\n\n"
-        f"[출력 형식]\n"
-        f"1) ...\n2) ...\n3) ..."
+        "다음은 발표 중 청중들이 남긴 질문들입니다.\n"
+        "유사하거나 중복된 질문은 묶어서 핵심만 요약해 주세요.\n"
+        "요약만 해주세요.\n"
+        "어떤 질문이 있었는지만 말하고, 이외 아무것도 말하지 말아주세요\n"
+        f"최대 {max_lines}문장으로 간결하게 정리해 주세요.\n\n"
+        f"{joined}"
     )
 
 async def summarize_kor(questions: List[str], max_lines: int = 3) -> Optional[str]:
