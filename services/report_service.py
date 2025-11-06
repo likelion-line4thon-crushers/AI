@@ -5,6 +5,8 @@ from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from models.report import Question, TopSlideReport
 from exception.errors import AppException, ReportErrorCode
+from services.summary_service import summarize_kor
+from config.settings import settings
 
 logger = logging.getLogger(__name__)  # 모듈 로거 등록
 
@@ -108,8 +110,13 @@ async def get_top_slide_report(
                 raise AppException(ReportErrorCode.STREAM_ERROR, detail={"qid": qid, "error": str(e)})  # [수정]
 
         logger.info(f"[리포트] room={room_id} 리포트 생성 완료 (총 {len(questions)}개의 질문 포함)")
+
+        # 질문 요약
+        contents = [q.content for q in questions if q.content]
+        summary_txt = await summarize_kor(contents, max_lines=settings.SUMMARY_MAX_LINES)
+
         return TopSlideReport(
-            roomId=room_id, slide=slide_no, totalQuestions=top_count, questions=questions
+            roomId=room_id, slide=slide_no, totalQuestions=top_count, questions=questions, summary=summary_txt,
         )
 
     except RedisError as e:  # [수정] except 블록 들여쓰기/위치 수정

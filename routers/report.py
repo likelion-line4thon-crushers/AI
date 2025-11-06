@@ -22,6 +22,4 @@ async def top_slide(
     r: Redis = Depends(get_redis),
 ):
     report = await get_top_slide_report(r, room_id, latest_first=latest_first)
-    if report.totalQuestions == 0 and report.slide == 0:
-        raise HTTPException(status_code=404, detail="No questions found for this room")
     return report
