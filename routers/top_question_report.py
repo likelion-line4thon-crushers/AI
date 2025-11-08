@@ -12,5 +12,5 @@ router = APIRouter(prefix="/report", tags=["Report"])
 )
 async def top3_report(room_id: str):
     questions = await list_room_questions(room_id)
-    report = build_top3(questions)
+    report = build_top3(room_id,questions)
     return success(report)
