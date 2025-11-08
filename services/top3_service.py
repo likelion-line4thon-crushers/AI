@@ -64,12 +64,12 @@ class _Cluster:
         self.cent_emb = first.emb
 
 # 메인 로직
-def build_top3(questions: List[QuestionRecord]) -> TopQuestionReportResponse:
+def build_top3(room_id: str, questions: List[QuestionRecord]) -> TopQuestionReportResponse:
     # 질문 리스트를 의미/문자 기반으로 클러스터링하여 상위 3개 그룹 추출
     try:
         if not questions:
             logger.info("[Top3] 입력된 질문이 없습니다.")
-            return TopQuestionReportResponse(totalQuestions=0, uniqueGroups=0, top3=[])
+            return TopQuestionReportResponse(roomId=room_id,totalQuestions=0, uniqueGroups=0, top3=[])
 
         items = [_Q(q) for q in questions]
 
@@ -152,6 +152,7 @@ def build_top3(questions: List[QuestionRecord]) -> TopQuestionReportResponse:
 
         logger.info(f"[Top3] 총 {len(clusters)}개의 그룹 중 상위 3개 반환")
         return TopQuestionReportResponse(
+            roomId=room_id,
             totalQuestions=len(questions),
             uniqueGroups=len(clusters),
             top3=top3,
