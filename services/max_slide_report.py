@@ -3,7 +3,7 @@ import logging
 from typing import List
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
-from models.report import Question, TopSlideReport
+from models.max_slide_report import Question, TopSlideReport
 from exception.errors import AppException, ReportErrorCode
 from services.summary_service import summarize_kor
 from config.settings import settings
