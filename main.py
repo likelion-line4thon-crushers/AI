@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from config.settings import settings
 from core.redis import get_redis, close_redis
-from routers.report import router as report_router
+from routers.max_slide_report import router as report_router
 
 logging.basicConfig(
     level=logging.INFO,

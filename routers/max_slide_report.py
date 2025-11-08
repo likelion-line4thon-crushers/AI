@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Query, HTTPException, Header
 from redis.asyncio import Redis
 from core.redis import get_redis
-from models.report import TopSlideReport
-from services.report_service import get_top_slide_report
+from models.max_slide_report import TopSlideReport
+from services.max_slide_report import get_top_slide_report
 from models.common import BaseResponse, success
 router = APIRouter(prefix="/report", tags=["report"])
 
