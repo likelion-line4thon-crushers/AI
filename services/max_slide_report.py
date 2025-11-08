@@ -60,8 +60,7 @@ async def get_top_slide_report(
         pattern = SLIDE_ZSET_PATTERN.format(roomId=room_id)
         slide_keys = await _scan_keys(r, pattern)
         if not slide_keys:
-            logger.warning(f"[리포트] 해당 room({room_id})에는 질문 데이터가 없습니다.")
-            raise AppException(ReportErrorCode.NO_QUESTIONS, detail={"roomId": room_id})  # [수정]
+            return TopSlideReport(roomId=room_id, slide=0, totalQuestions=0, questions=[], summary=None)
 
         # 2) 슬라이드별 질문 수
         pipe = r.pipeline()
