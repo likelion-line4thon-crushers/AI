@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from config.settings import settings
 from core.redis import get_redis, close_redis
 from routers.max_slide_report import router as report_router
+from routers.top_question_report import router as topq_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,6 +50,7 @@ app.add_middleware(
 
 # 라우터 등록
 app.include_router(report_router)
+app.include_router(topq_router)
 
 # errors.py에 정의된 타입을 사용
 @app.exception_handler(AppException)
