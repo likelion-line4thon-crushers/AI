@@ -23,7 +23,6 @@ async def update_report_popular_question(db: AsyncSession, rpt: TopSlideReport) 
     })
     await db.commit()
 
-# ✅ 새로 추가할 함수
 async def upsert_top_slide_report_null(db: AsyncSession, room_id: str) -> None:
     """
     슬라이드/질문이 없을 때 NULL 값으로 리포트를 초기화(업서트)
