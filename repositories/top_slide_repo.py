@@ -22,3 +22,24 @@ async def update_report_popular_question(db: AsyncSession, rpt: TopSlideReport) 
         "room_id": rpt.roomId,
     })
     await db.commit()
+
+# ✅ 새로 추가할 함수
+async def upsert_top_slide_report_null(db: AsyncSession, room_id: str) -> None:
+    """
+    슬라이드/질문이 없을 때 NULL 값으로 리포트를 초기화(업서트)
+    """
+    sql = text("""
+        INSERT INTO report (
+            room_id,
+            popular_question
+        )
+        VALUES (
+            :room_id,
+            NULL
+        )
+        ON DUPLICATE KEY UPDATE
+            popular_question = VALUES(popular_question)
+    """)
+
+    await db.execute(sql, {"room_id": room_id})
+    await db.commit()

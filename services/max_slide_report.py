@@ -9,7 +9,7 @@ from exception.errors import AppException, ReportErrorCode
 from services.summary_service import summarize_kor
 from config.settings import settings
 from core.db import async_session_factory
-from repositories.top_slide_repo import update_report_popular_question
+from repositories.top_slide_repo import update_report_popular_question, upsert_top_slide_report_null
 
 logger = logging.getLogger(__name__)  # 모듈 로거 등록
 
@@ -64,7 +64,7 @@ async def get_top_slide_report(
         slide_keys = await _scan_keys(r, pattern)
         if not slide_keys:
             rpt = TopSlideReport(roomId=room_id, slide=0, totalQuestions=0, questions=[], summary=None)
-            await update_report_popular_question(db, rpt)
+            await upsert_top_slide_report_null(db, room_id)
             return rpt
 
         # 2) 슬라이드별 질문 수

@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 from config.settings import settings
 
 # 비동기 엔진 생성
@@ -18,11 +18,6 @@ async_session_factory = sessionmaker(
 )
 
 # FastAPI 의존성으로 쓸 수 있는 세션 함수
-@asynccontextmanager
-async def get_db():
-    """FastAPI 의존성으로 사용할 비동기 DB 세션 생성기"""
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session  # ← 이게 핵심! 반환(return) 아님. 컨텍스트/팩토리 아님.
