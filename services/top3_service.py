@@ -6,6 +6,11 @@ from models.question_report import QuestionRecord, TopQuestionItem, TopQuestionR
 from . import text_sim as TS
 from exception.errors import AppException, ReportErrorCode  # [추가]
 from redis.exceptions import RedisError
+from sqlalchemy.ext.asyncio import AsyncSession  # ← DB 세션 타입힌트
+from repositories.top_question_repo import (     # ← 너가 방금 만든 레포지토리
+    upsert_top3_null,                            #     0개일 때 NULL 업서트
+    update_report_top3,                          #     TOP3를 JSON으로 저장
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,11 +69,12 @@ class _Cluster:
         self.cent_emb = first.emb
 
 # 메인 로직
-def build_top3(room_id: str, questions: List[QuestionRecord]) -> TopQuestionReportResponse:
+async def build_top3(room_id: str, questions: List[QuestionRecord], db: AsyncSession) -> TopQuestionReportResponse:
     # 질문 리스트를 의미/문자 기반으로 클러스터링하여 상위 3개 그룹 추출
     try:
         if not questions:
             logger.info("[Top3] 입력된 질문이 없습니다.")
+            await upsert_top3_null(db, room_id)
             return TopQuestionReportResponse(roomId=room_id,totalQuestions=0, uniqueGroups=0, top3=[])
 
         items = [_Q(q) for q in questions]
@@ -151,6 +157,9 @@ def build_top3(room_id: str, questions: List[QuestionRecord]) -> TopQuestionRepo
         ]
 
         logger.info(f"[Top3] 총 {len(clusters)}개의 그룹 중 상위 3개 반환")
+
+        await update_report_top3(db, room_id, top3)
+
         return TopQuestionReportResponse(
             roomId=room_id,
             totalQuestions=len(questions),
