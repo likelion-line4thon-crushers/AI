@@ -13,6 +13,7 @@ on:
       - "models/**"
       - "routers/**"
       - "services/**"
+      - "repositories/**"
       - ".github/workflows/deploy-fastapi.yml"
 
 jobs:
@@ -41,7 +42,8 @@ jobs:
             exception/**,
             models/**,
             routers/**,
-            services/**
+            services/**,
+            repositories/** 
           target: "/home/ubuntu/Boini/fastapi"
           overwrite: true
           strip_components: 0
