@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query, HTTPException, Header
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+from core.db import get_db
 from redis.asyncio import Redis
 from core.redis import get_redis
 from models.max_slide_report import TopSlideReport
@@ -13,8 +15,8 @@ router = APIRouter(prefix="/report", tags=["report"])
 async def top_slide(
     room_id: str,
     latest_first: bool = Query(False, description="질문 목록을 최신순으로 정렬"),
-    r: Redis = Depends(get_redis),
+    r: Redis = Depends(get_redis), db: AsyncSession = Depends(get_db),
 ):
-    report = await get_top_slide_report(r, room_id, latest_first=latest_first)
+    report = await get_top_slide_report(r, room_id, db, latest_first=latest_first)
 
     return success(report)

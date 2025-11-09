@@ -3,10 +3,13 @@ import logging
 from typing import List
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
+from sqlalchemy.ext.asyncio import AsyncSession
 from models.max_slide_report import Question, TopSlideReport
 from exception.errors import AppException, ReportErrorCode
 from services.summary_service import summarize_kor
 from config.settings import settings
+from core.db import async_session_factory
+from repositories.top_slide_repo import update_report_popular_question, upsert_top_slide_report_null
 
 logger = logging.getLogger(__name__)  # 모듈 로거 등록
 
@@ -51,7 +54,7 @@ def _parse_slide_no(zset_key: str) -> int:
 ##     5️. 각 질문의 상세 정보(HGETALL) 벌크 조회
 ##     6️. Question 모델 리스트로 변환 후 TopSlideReport로 반환
 async def get_top_slide_report(
-    r: Redis, room_id: str, latest_first: bool = False
+    r: Redis, room_id: str, db: AsyncSession, latest_first: bool = False
 ) -> TopSlideReport:
     logger.info(f"[리포트] room={room_id}의 최다 질문 슬라이드 리포트 생성 시작")
 
@@ -60,7 +63,9 @@ async def get_top_slide_report(
         pattern = SLIDE_ZSET_PATTERN.format(roomId=room_id)
         slide_keys = await _scan_keys(r, pattern)
         if not slide_keys:
-            return TopSlideReport(roomId=room_id, slide=0, totalQuestions=0, questions=[], summary=None)
+            rpt = TopSlideReport(roomId=room_id, slide=0, totalQuestions=0, questions=[], summary=None)
+            await upsert_top_slide_report_null(db, room_id)
+            return rpt
 
         # 2) 슬라이드별 질문 수
         pipe = r.pipeline()
@@ -114,9 +119,13 @@ async def get_top_slide_report(
         contents = [q.content for q in questions if q.content]
         summary_txt = await summarize_kor(contents, max_lines=settings.SUMMARY_MAX_LINES)
 
-        return TopSlideReport(
+        rpt = TopSlideReport(
             roomId=room_id, slide=slide_no, totalQuestions=top_count, questions=questions, summary=summary_txt,
         )
+
+        async with async_session_factory() as db:
+            await update_report_popular_question(db, rpt)
+        return rpt
 
     except RedisError as e:
         logger.error(f"[리포트] Redis 오류: {e}")
