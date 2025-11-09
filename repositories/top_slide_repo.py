@@ -7,7 +7,7 @@ async def update_report_popular_question(db: AsyncSession, rpt: TopSlideReport) 
     """TopSlideReport 결과를 report.popular_question 컬럼에 JSON으로 저장"""
     payload = {
         "slide": rpt.slide,
-        "questions": [q.model_dump() for q in rpt.questions],
+        "questions": [q.content for q in rpt.questions if (q.content or "").strip()],
         "summary": rpt.summary,
     }
 
