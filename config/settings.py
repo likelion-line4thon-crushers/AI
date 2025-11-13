@@ -10,7 +10,8 @@ class Settings(BaseSettings):
         "http://localhost:8080, "
         "http://localhost:5173, "
         "https://boini.shop, "
-        "https://api.boini.shop"
+        "https://api.boini.shop, "
+        "https://boini.kr"
     )
 
     # ===== LLM 요약 설정 =====
