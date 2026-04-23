@@ -12,7 +12,7 @@ from sentence_transformers import SentenceTransformer
 logger = logging.getLogger(__name__)
 
 EMB_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
-EMB_THRESHOLD = 0.45       # 코사인 유사도 임계값: 이 이상이면 같은 클러스터로 판단
+EMB_THRESHOLD = 0.35       # 코사인 유사도 임계값: 이 이상이면 같은 클러스터로 판단
 NGRAM = 2                   # 문자 n-gram 크기 (simhash용)
 HAMMING_THRESHOLD = 4       # simhash 해밍 거리 임계값: 이 이하이면 같은 클러스터로 판단
 JACCARD_FALLBACK = 0.60     # 코사인/해밍 둘 다 실패 시 자카드 유사도 기준
@@ -76,14 +76,15 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
                 best_d_idx = i
 
         if best_cos_idx >= 0 and best_cos >= EMB_THRESHOLD:
-            # 코사인 유사도 기준 합류: 중심 벡터를 새 질문으로 갱신 (centroid drift 발생 지점)
+            # 코사인 유사도 기준 합류: 기존 중심과 새 임베딩을 가중 평균해 중심 안정화
             c = clusters[best_cos_idx]
             c["member_ids"].append(question.id)
             c["slides"] = sorted(set(c["slides"] + [question.slide]))
             if len(c["samples"]) < 3:
                 c["samples"].append(question.content)
             c["count"] += 1
-            c["centroid_emb"] = emb.tolist()
+            old_centroid = np.array(c["centroid_emb"], dtype=np.float32)
+            c["centroid_emb"] = ((old_centroid * (c["count"] - 1) + emb) / c["count"]).tolist()
             joined = True
 
         elif best_d_idx >= 0 and best_d <= HAMMING_THRESHOLD:
