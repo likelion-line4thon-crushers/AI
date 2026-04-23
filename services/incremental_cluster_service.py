@@ -131,18 +131,23 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         total_raw = await redis.get(_total_key(room_id))
         total = int(total_raw) if total_raw else 0
 
-        # count 내림차순 정렬 후 응답 변환
+        # 삭제된 질문 ID 조회 (클러스터 응답에서 제외용)
+        deleted_ids = await redis.smembers(f"room:{room_id}:questions:deleted")
+
+        # count 내림차순 정렬 후 응답 변환 (deleted 질문 필터링)
         clusters_sorted = sorted(clusters, key=lambda c: c["count"], reverse=True)
-        items = [
-            ClusterItem(
+        items = []
+        for c in clusters_sorted:
+            visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids]
+            if not visible_ids:
+                continue
+            items.append(ClusterItem(
                 representative=c["representative"],
-                count=c["count"],
-                questionIds=c["member_ids"],
+                count=len(visible_ids),
+                questionIds=visible_ids,
                 slides=c["slides"],
                 samples=c["samples"],
-            )
-            for c in clusters_sorted
-        ]
+            ))
 
         logger.info(f"[IncrementalCluster] roomId={room_id}, 총 {len(clusters)}개 그룹")
 
