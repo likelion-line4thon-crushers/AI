@@ -174,7 +174,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         items = []
         for c in clusters_sorted:
             visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids]
-            if not visible_ids:
+            if len(visible_ids) < 2:
                 continue
             items.append(ClusterItem(
                 representative=c["representative"],
