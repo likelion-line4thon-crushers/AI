@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.question_reader import list_room_questions, list_completed_questions, list_all_questions
 from core.db import get_db
 from services.top3_service import build_top3
-from services.incremental_cluster_service import add_question_to_clusters
+from services.incremental_cluster_service import add_question_to_clusters, get_current_clusters
 from models.question_report import TopQuestionReportResponse, QuestionRecord
 from models.cluster import QuestionInput, ClusterReportResponse
 from models.common import BaseResponse, success
@@ -46,6 +46,17 @@ async def all_questions(room_id: str):
     # active + completed 질문 모두 반환, deleted만 제외
     questions = await list_all_questions(room_id)
     return success(questions)
+
+
+@router.get(
+    "/questions/rooms/{room_id}/clusters",
+    response_model=BaseResponse[ClusterReportResponse],
+    summary="현재 클러스터 상태 조회",
+    description="Redis에 저장된 현재 클러스터 상태를 반환합니다. 발표자 페이지 새로고침 시 초기 상태 복원에 사용합니다.",
+)
+async def current_clusters(room_id: str):
+    result = await get_current_clusters(room_id)
+    return success(result)
 
 
 @router.post(

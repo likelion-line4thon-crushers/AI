@@ -39,6 +39,41 @@ def _total_key(room_id: str) -> str:
     return f"room:{room_id}:questionCount"
 
 
+async def get_current_clusters(room_id: str) -> ClusterReportResponse:
+    # 새 질문 추가 없이 Redis에 저장된 현재 클러스터 상태를 그대로 읽어 반환한다.
+    # 발표자 페이지 새로고침 시 초기 상태 복원에 사용된다.
+    redis = await get_redis()
+
+    raw = await redis.get(_clusters_key(room_id))
+    clusters: List[Dict] = json.loads(raw) if raw else []
+
+    total_raw = await redis.get(_total_key(room_id))
+    total = int(total_raw) if total_raw else 0
+
+    deleted_ids = await redis.smembers(f"room:{room_id}:questions:deleted")
+
+    clusters_sorted = sorted(clusters, key=lambda c: c["count"], reverse=True)
+    items = []
+    for c in clusters_sorted:
+        visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids]
+        if len(visible_ids) < 2:
+            continue
+        items.append(ClusterItem(
+            representative=c["representative"],
+            count=len(visible_ids),
+            questionIds=visible_ids,
+            slides=c["slides"],
+            samples=c["samples"],
+        ))
+
+    return ClusterReportResponse(
+        roomId=room_id,
+        totalQuestions=total,
+        uniqueGroups=len(items),
+        clusters=items,
+    )
+
+
 async def add_question_to_clusters(room_id: str, question: QuestionInput) -> ClusterReportResponse:
     # 새 질문 1개를 기존 클러스터 상태에 증분 추가하고 전체 클러스터 결과를 반환한다.
     # 판단 우선순위: 코사인 유사도 → 해밍 거리 → 자카드 유사도 → 신규 클러스터 생성
@@ -139,7 +174,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         items = []
         for c in clusters_sorted:
             visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids]
-            if not visible_ids:
+            if len(visible_ids) < 2:
                 continue
             items.append(ClusterItem(
                 representative=c["representative"],
