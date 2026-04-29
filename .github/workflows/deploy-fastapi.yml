@@ -51,15 +51,13 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           port: 22
           script: |
-            set -euo pipefail
+            set -e
             cd /home/ubuntu/Boini
-
-            echo "[1/4] docker compose 유효성 검사"
             docker compose config >/dev/null
-
-            echo "[2/4] fastapi 빌드 & 재기동"
             docker compose up -d --build fastapi
             sleep 5
+            docker compose up -d nginx # [수정] fastapi 뜬 후 nginx 올리기
+            sleep 3
             docker exec nginx-container nginx -t
             docker exec nginx-container nginx -s reload
             # curl -fsS https://api.boini.shop/ai/healthz  # [수정] DNS 연결 전까지 헬스체크 주석처리
