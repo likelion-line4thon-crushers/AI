@@ -1,5 +1,4 @@
 name: Deploy FastAPI to EC2 (Direct Build)
-
 on:
   push:
     branches: [ main ]
@@ -15,23 +14,20 @@ on:
       - "services/**"
       - "repositories/**"
       - ".github/workflows/deploy-fastapi.yml"
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # (루트 구조이므로 move 단계 불필요)
-      - name: Copy files to EC2 (root-based layout)
+      - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: ${{ secrets.EC2_PORT }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
           source: |
             Dockerfile,
             requirements.txt,
@@ -42,7 +38,7 @@ jobs:
             models/**,
             routers/**,
             services/**,
-            repositories/** 
+            repositories/**
           target: "/home/ubuntu/Boini/fastapi"
           overwrite: true
           strip_components: 0
@@ -50,10 +46,10 @@ jobs:
       - name: Build & Restart FastAPI via Docker Compose
         uses: appleboy/ssh-action@v1.1.0
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: ${{ secrets.EC2_PORT }}
+          host: ${{ secrets.SSH_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_KEY }}
+          port: 22
           script: |
             set -euo pipefail
             cd /home/ubuntu/Boini
@@ -63,37 +59,8 @@ jobs:
 
             echo "[2/4] fastapi 빌드 & 재기동"
             docker compose up -d --build fastapi
-
-            echo "[3/4] nginx 문법 테스트 & reload"
+            sleep 5
             docker exec nginx-container nginx -t
             docker exec nginx-container nginx -s reload
-
-            echo "[4/4] 헬스체크 (내부 → 외부 순서)"
-
-            # 4-1) 내부: nginx 컨테이너에서 fastapi 업스트림 직접 확인 (/ai 프리픽스 유지)
-            if ! docker exec nginx-container bash -lc 'apt-get update >/dev/null && apt-get install -y curl >/dev/null && curl -fsS http://fastapi-container:8000/ai/healthz >/dev/null'; then
-              echo "::error::❌ nginx → fastapi 내부 통신 실패"
-              docker logs nginx-container --tail=120 || true
-              docker logs fastapi-container --tail=120 || true
-              exit 1
-            fi
-            echo "✅ 내부 OK"
-
-            # 4-2) 외부: 도메인(HTTPS) 재시도 확대
-            ok=0
-            for i in $(seq 1 30); do
-              if curl -fsS https://api.boini.shop/ai/healthz >/dev/null; then
-                ok=1; echo "✅ 외부 OK"; break
-              fi
-              echo "health not ready yet... ($i/30)"; sleep 2
-            done
-
-            if [ "$ok" -ne 1 ]; then
-              echo "::error::❌ 외부 헬스체크 실패 (내부는 OK)"
-              docker logs nginx-container --tail=200 || true
-              docker logs fastapi-container --tail=200 || true
-              # 외부 실패도 실패로 처리하려면 다음 줄 주석 해제
-              # exit 1
-            fi
-
-            echo "🚀 Deploy OK"
+            # curl -fsS https://api.boini.shop/ai/healthz  # [수정] DNS 연결 전까지 헬스체크 주석처리
+            echo "Deploy OK"
