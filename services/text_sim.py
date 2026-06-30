@@ -5,6 +5,15 @@ import unicodedata
 from typing import Iterable, Set, Tuple, List, Dict
 import math
 
+try:
+    from kiwipiepy import Kiwi
+    _kiwi = Kiwi()
+    _KIWI_AVAILABLE = True
+except ImportError:
+    _kiwi = None
+    _KIWI_AVAILABLE = False
+
+_KEEP_TAGS = {"NNG", "NNP", "SL", "VV", "VA"}
 
 _SPACE_MULTI = re.compile(r"\s+")
 _PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
@@ -16,6 +25,17 @@ def normalize(s: str | None) -> str:
     t = _PUNCT.sub(" ", t)
     t = _SPACE_MULTI.sub(" ", t).strip()
     return t
+
+def extract_keywords(s: str) -> str:
+    """형태소 분석으로 명사(NNG/NNP/SL)+동사(VV/VA) 어절만 추출. kiwipiepy 없으면 원문 반환."""
+    if not _KIWI_AVAILABLE or not s:
+        return s
+    try:
+        tokens = _kiwi.tokenize(s)
+        keywords = [t.form for t in tokens if str(t.tag) in _KEEP_TAGS]
+        return " ".join(keywords) if keywords else s
+    except Exception:
+        return s
 
 def char_ngrams(s: str, n: int = 2) -> Set[str]:
     s = s.replace(" ", "")

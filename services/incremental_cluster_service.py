@@ -12,7 +12,7 @@ from sentence_transformers import SentenceTransformer
 logger = logging.getLogger(__name__)
 
 EMB_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"
-EMB_THRESHOLD = 0.35       # 코사인 유사도 임계값: 이 이상이면 같은 클러스터로 판단
+EMB_THRESHOLD = 0.60       # 코사인 유사도 임계값: 이 이상이면 같은 클러스터로 판단
 NGRAM = 2                   # 문자 n-gram 크기 (simhash용)
 HAMMING_THRESHOLD = 4       # simhash 해밍 거리 임계값: 이 이하이면 같은 클러스터로 판단
 JACCARD_FALLBACK = 0.60     # 코사인/해밍 둘 다 실패 시 자카드 유사도 기준
@@ -21,9 +21,10 @@ _model = SentenceTransformer(EMB_MODEL)
 
 
 def _embed(text: str) -> np.ndarray:
-    # 텍스트를 정규화한 뒤 한국어 SBERT로 임베딩 (코사인 정규화 포함)
+    # 정규화 → 형태소 기반 키워드 추출 → SBERT 임베딩 (코사인 정규화 포함)
     try:
-        return _model.encode(TS.normalize(text), normalize_embeddings=True)
+        preprocessed = TS.extract_keywords(TS.normalize(text))
+        return _model.encode(preprocessed, normalize_embeddings=True)
     except Exception as e:
         logger.error(f"[임베딩] '{text[:20]}' 처리 실패: {e}")
         raise AppException(ReportErrorCode.EMBED_ERROR, detail=str(e))
@@ -97,6 +98,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         best_cos = -1.0
         best_d_idx = -1
         best_d = 1 << 30
+        training_representative: str | None = None  # 파인튜닝용 대표 질문 추적
 
         # 전체 클러스터와 코사인/해밍 유사도 비교해서 가장 가까운 클러스터 탐색
         for i, c in enumerate(clusters):
@@ -114,6 +116,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         if best_cos_idx >= 0 and best_cos >= EMB_THRESHOLD:
             # 코사인 유사도 기준 합류: 기존 중심과 새 임베딩을 가중 평균해 중심 안정화
             c = clusters[best_cos_idx]
+            training_representative = c["representative"]
             c["member_ids"].append(question.id)
             c["slides"] = sorted(set(c["slides"] + [question.slide]))
             if len(c["samples"]) < 3:
@@ -126,6 +129,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         elif best_d_idx >= 0 and best_d <= HAMMING_THRESHOLD:
             # 해밍 거리 기준 합류: 문자 패턴이 비슷한 경우
             c = clusters[best_d_idx]
+            training_representative = c["representative"]
             c["member_ids"].append(question.id)
             c["slides"] = sorted(set(c["slides"] + [question.slide]))
             if len(c["samples"]) < 3:
@@ -139,6 +143,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
                 c_sh = set(c["ngrams"])
                 jac = TS.jaccard(sh, c_sh)
                 if jac >= JACCARD_FALLBACK:
+                    training_representative = c["representative"]
                     c["member_ids"].append(question.id)
                     c["slides"] = sorted(set(c["slides"] + [question.slide]))
                     if len(c["samples"]) < 3:
@@ -149,6 +154,9 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
 
             if not joined:
                 # 어느 클러스터에도 속하지 않으면 신규 클러스터 생성
+                # 비유사 쌍 기록을 위해 코사인 최근접 클러스터의 representative 사용
+                if best_cos_idx >= 0:
+                    training_representative = clusters[best_cos_idx]["representative"]
                 clusters.append({
                     "representative": question.content,
                     "centroid_emb": emb.tolist(),
@@ -159,6 +167,15 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
                     "samples": [question.content],
                     "count": 1,
                 })
+
+        # 파인튜닝용 질문 쌍 데이터를 Redis에 누적 (기존 클러스터가 있을 때만)
+        if training_representative is not None:
+            training_entry = json.dumps({
+                "question": question.content,
+                "representative": training_representative,
+                "similar": joined,
+            }, ensure_ascii=False)
+            await redis.rpush(f"room:{room_id}:training_data", training_entry)
 
         # 갱신된 클러스터 상태를 Redis에 저장
         await redis.set(_clusters_key(room_id), json.dumps(clusters))
