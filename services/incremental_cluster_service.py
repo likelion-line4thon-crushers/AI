@@ -4,8 +4,10 @@ import numpy as np
 from typing import List, Dict
 
 from models.cluster import QuestionInput, ClusterItem, ClusterReportResponse
+from models.training_data import TrainingData
 from services import text_sim as TS
 from core.redis import get_redis
+from core.db import async_session_factory
 from exception.errors import AppException, ReportErrorCode
 from sentence_transformers import SentenceTransformer
 
@@ -98,7 +100,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         best_cos = -1.0
         best_d_idx = -1
         best_d = 1 << 30
-        training_representative: str | None = None  # 파인튜닝용 대표 질문 추적
+        training_representative: str | None = None
 
         # 전체 클러스터와 코사인/해밍 유사도 비교해서 가장 가까운 클러스터 탐색
         for i, c in enumerate(clusters):
@@ -154,9 +156,6 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
 
             if not joined:
                 # 어느 클러스터에도 속하지 않으면 신규 클러스터 생성
-                # 비유사 쌍 기록을 위해 코사인 최근접 클러스터의 representative 사용
-                if best_cos_idx >= 0:
-                    training_representative = clusters[best_cos_idx]["representative"]
                 clusters.append({
                     "representative": question.content,
                     "centroid_emb": emb.tolist(),
@@ -168,14 +167,16 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
                     "count": 1,
                 })
 
-        # 파인튜닝용 질문 쌍 데이터를 Redis에 누적 (기존 클러스터가 있을 때만)
-        if training_representative is not None:
-            training_entry = json.dumps({
-                "question": question.content,
-                "representative": training_representative,
-                "similar": joined,
-            }, ensure_ascii=False)
-            await redis.rpush(f"room:{room_id}:training_data", training_entry)
+        # 합류 성공 시 파인튜닝용 데이터를 MySQL에 저장
+        if joined and training_representative is not None:
+            async with async_session_factory() as session:
+                session.add(TrainingData(
+                    room_id=room_id,
+                    question_a=question.content,
+                    question_b=training_representative,
+                    is_similar=True,
+                ))
+                await session.commit()
 
         # 갱신된 클러스터 상태를 Redis에 저장
         await redis.set(_clusters_key(room_id), json.dumps(clusters))

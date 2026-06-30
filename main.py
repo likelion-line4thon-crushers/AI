@@ -8,6 +8,9 @@ from fastapi.responses import JSONResponse
 
 from config.settings import settings
 from core.redis import get_redis, close_redis
+from core.db import engine
+from models.max_slide_report import Base
+import models.training_data  # Base.metadata에 TrainingData 테이블 등록
 from routers.max_slide_report import router as report_router
 from routers.top_question_report import router as topq_router
 
@@ -25,6 +28,14 @@ async def lifespan(app: FastAPI):
         print("[startup] Redis 연결 성공")
     except Exception as e:
         print(f"[startup] Redis 연결 실패: {e}")
+        raise
+
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("[startup] DB 테이블 생성 완료")
+    except Exception as e:
+        print(f"[startup] DB 테이블 생성 실패: {e}")
         raise
 
     yield  # 여기까지 실행되면 앱이 '정상 구동 중'
