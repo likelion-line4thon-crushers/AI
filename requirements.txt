@@ -8,6 +8,7 @@ openai>=1.0.0
 sentence-transformers>=3.0.0
 torch>=2.3.0
 numpy>=1.26.0
+kiwipiepy>=0.17.0
 
 sqlalchemy[asyncio]>=2.0.0
 aiomysql>=0.2.0
