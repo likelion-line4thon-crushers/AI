@@ -51,11 +51,12 @@ async def get_current_clusters(room_id: str) -> ClusterReportResponse:
     total = int(total_raw) if total_raw else 0
 
     deleted_ids = await redis.smembers(f"room:{room_id}:questions:deleted")
+    completed_ids = await redis.smembers(f"room:{room_id}:questions:completed")
 
     clusters_sorted = sorted(clusters, key=lambda c: c["count"], reverse=True)
     items = []
     for c in clusters_sorted:
-        visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids]
+        visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids and qid not in completed_ids]
         if len(visible_ids) < 2:
             continue
         items.append(ClusterItem(
@@ -166,14 +167,15 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         total_raw = await redis.get(_total_key(room_id))
         total = int(total_raw) if total_raw else 0
 
-        # 삭제된 질문 ID 조회 (클러스터 응답에서 제외용)
+        # 삭제/완료된 질문 ID 조회 (클러스터 응답에서 제외용)
         deleted_ids = await redis.smembers(f"room:{room_id}:questions:deleted")
+        completed_ids = await redis.smembers(f"room:{room_id}:questions:completed")
 
-        # count 내림차순 정렬 후 응답 변환 (deleted 질문 필터링)
+        # count 내림차순 정렬 후 응답 변환 (deleted/completed 질문 필터링)
         clusters_sorted = sorted(clusters, key=lambda c: c["count"], reverse=True)
         items = []
         for c in clusters_sorted:
-            visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids]
+            visible_ids = [qid for qid in c["member_ids"] if qid not in deleted_ids and qid not in completed_ids]
             if len(visible_ids) < 2:
                 continue
             items.append(ClusterItem(
@@ -189,7 +191,7 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         return ClusterReportResponse(
             roomId=room_id,
             totalQuestions=total,
-            uniqueGroups=len(clusters),
+            uniqueGroups=len(items),
             clusters=items,
         )
 
