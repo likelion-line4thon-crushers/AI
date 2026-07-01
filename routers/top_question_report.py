@@ -5,7 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from services.question_reader import list_room_questions, list_completed_questions, list_all_questions
 from core.db import get_db
 from services.top3_service import build_top3
-from services.incremental_cluster_service import add_question_to_clusters, get_current_clusters
+from services.incremental_cluster_service import (
+    add_question_to_clusters,
+    get_current_clusters,
+    refresh_clusters,
+)
 from models.question_report import TopQuestionReportResponse, QuestionRecord
 from models.cluster import QuestionInput, ClusterReportResponse
 from models.common import BaseResponse, success
@@ -69,4 +73,15 @@ async def incremental_cluster(room_id: str, question: QuestionInput):
     # Spring Boot가 질문 저장 직후 호출한다.
     # Redis에 누적된 클러스터 상태에 새 질문을 끼워넣고 전체 결과를 반환한다.
     result = await add_question_to_clusters(room_id, question)
+    return success(result)
+
+
+@router.post(
+    "/questions/rooms/{room_id}/clusters/refresh",
+    response_model=BaseResponse[ClusterReportResponse],
+    summary="클러스터 상태 갱신",
+    description="완료/삭제 상태를 반영해 Redis 클러스터 상태를 정리하고 현재 활성 클러스터 결과를 반환합니다.",
+)
+async def refresh_cluster_state(room_id: str):
+    result = await refresh_clusters(room_id)
     return success(result)
