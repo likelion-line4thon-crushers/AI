@@ -10,10 +10,22 @@ class QuestionInput(BaseModel):
     ts: int        # 질문 생성 타임스탬프 (epoch ms)
 
 
+class ClusterQuestionItem(BaseModel):
+    # 클러스터에 포함된 실제 질문 레코드. 액션 대상은 이 id를 사용한다.
+    id: str
+    content: str
+    slide: int
+    ts: int
+    status: str = "active"
+
+
 class ClusterItem(BaseModel):
     # 클러스터 1개의 결과 (프론트엔드에 전달되는 단위)
+    clusterId: str
+    representativeQuestionId: str
     representative: str      # 대표 질문 문구 (UI 접힌 상태에서 노출)
     count: int               # 해당 클러스터에 묶인 질문 수
+    questions: List[ClusterQuestionItem]
     questionIds: List[str]   # 묶인 질문 ID 목록
     slides: List[int]        # 해당 질문들이 등장한 슬라이드 번호 목록 (중복 제거)
     samples: List[str]       # 묶인 질문 샘플 최대 3개 (펼쳤을 때 표시용)
