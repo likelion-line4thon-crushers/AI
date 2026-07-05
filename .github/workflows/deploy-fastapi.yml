@@ -59,17 +59,18 @@ jobs:
             # 3. 헬스체크 (fastapi 컨테이너 내부에서 python으로 자기 자신 확인)
             #    nginx:latest 이미지엔 curl/wget이 없어서, fastapi 컨테이너에 이미 있는
             #    python 인터프리터로 자체 체크하는 방식이 더 안전함
-            #    최대 30초, 3초 간격
+            #    ML 모델(torch/sentence-transformers/kiwipiepy) 로딩 시간을 감안해
+            #    최대 2분(5초 × 24회) 대기
             echo "헬스체크 시작..."
             SUCCESS=false
-            for i in $(seq 1 10); do
+            for i in $(seq 1 24); do
               if docker exec fastapi-container python -c "import urllib.request, sys; r = urllib.request.urlopen('http://localhost:8000/healthz', timeout=3); sys.exit(0 if r.status == 200 else 1)" 2>/dev/null; then
-                echo "헬스체크 성공 (${i}번째 시도)"
+                echo "헬스체크 성공 (${i}번째 시도, 약 $((i*5))초 소요)"
                 SUCCESS=true
                 break
               fi
-              echo "대기 중... (${i}/10)"
-              sleep 3
+              echo "대기 중... (${i}/24, 약 $((i*5))초 경과)"
+              sleep 5
             done
 
             if [ "$SUCCESS" != true ]; then
