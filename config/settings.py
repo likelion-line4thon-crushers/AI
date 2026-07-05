@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     ALLOW_ORIGINS: str = (
         "http://localhost:8080, "
         "http://localhost:5173, "
+        "http://localhost:5174, "
         "https://boini.shop, "
         "https://api.boini.shop"
         # "https://boini.kr"

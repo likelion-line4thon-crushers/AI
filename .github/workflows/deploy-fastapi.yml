@@ -14,6 +14,11 @@ on:
       - "services/**"
       - "repositories/**"
       - ".github/workflows/deploy-fastapi.yml"
+
+concurrency:
+  group: production-deploy-fastapi
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -28,17 +33,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.SSH_KEY }}
           port: 22
-          source: |
-            Dockerfile,
-            requirements.txt,
-            main.py,
-            config/**,
-            core/**,
-            exception/**,
-            models/**,
-            routers/**,
-            services/**,
-            repositories/**
+          source: "Dockerfile,requirements.txt,main.py,config/**,core/**,exception/**,models/**,routers/**,services/**,repositories/**"
           target: "/home/ubuntu/Boini/fastapi"
           overwrite: true
           strip_components: 0
@@ -54,11 +49,42 @@ jobs:
             set -e
             cd /home/ubuntu/Boini
             docker compose config >/dev/null
+
+            # 1. 현재 이미지를 롤백용으로 태깅
+            docker tag boini-fastapi:latest boini-fastapi:rollback 2>/dev/null || true
+
+            # 2. 새 이미지 빌드 & 재시작
             docker compose up -d --build fastapi
-            sleep 5
-            docker compose up -d nginx # [수정] fastapi 뜬 후 nginx 올리기
+
+            # 3. 헬스체크 (fastapi 컨테이너 내부에서 python으로 자기 자신 확인)
+            #    nginx:latest 이미지엔 curl/wget이 없어서, fastapi 컨테이너에 이미 있는
+            #    python 인터프리터로 자체 체크하는 방식이 더 안전함
+            #    최대 30초, 3초 간격
+            echo "헬스체크 시작..."
+            SUCCESS=false
+            for i in $(seq 1 10); do
+              if docker exec fastapi-container python -c "import urllib.request, sys; r = urllib.request.urlopen('http://localhost:8000/healthz', timeout=3); sys.exit(0 if r.status == 200 else 1)" 2>/dev/null; then
+                echo "헬스체크 성공 (${i}번째 시도)"
+                SUCCESS=true
+                break
+              fi
+              echo "대기 중... (${i}/10)"
+              sleep 3
+            done
+
+            if [ "$SUCCESS" != true ]; then
+              echo "헬스체크 실패 — 이전 버전으로 롤백합니다"
+              docker tag boini-fastapi:rollback boini-fastapi:latest
+              docker compose up -d --no-build fastapi
+              echo "롤백 완료. 배포는 실패로 처리됩니다."
+              exit 1
+            fi
+
+            # 4. nginx 재기동 (fastapi 정상 확인 후에만 진행)
+            docker compose up -d nginx
             sleep 3
             docker exec nginx-container nginx -t
             docker exec nginx-container nginx -s reload
-            # curl -fsS https://api.boini.shop/ai/healthz  # [수정] DNS 연결 전까지 헬스체크 주석처리
+
+            docker image prune -f
             echo "Deploy OK"

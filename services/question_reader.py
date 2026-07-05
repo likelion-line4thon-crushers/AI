@@ -66,6 +66,8 @@ async def list_completed_questions(room_id: str) -> List[QuestionRecord]:
     for h in hashes:
         if not h:
             continue
+        if h.get("status") != "completed":
+            continue
         try:
             out.append(
                 QuestionRecord(
