@@ -12,7 +12,7 @@ import json
 import os
 import sys
 from itertools import combinations
-from typing import Callable, Dict, List, Set
+from typing import Callable, Dict, List
 
 import numpy as np
 

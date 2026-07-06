@@ -17,6 +17,7 @@ EMB_MODEL = "BAAI/bge-m3"  # 다국어(한국어 포함) 임베딩. KR-SBERT 대
 EMB_THRESHOLD = 0.55       # 코사인 유사도 임계값: 이 이상이면 같은 클러스터로 판단 (bge-m3 기준 튜닝값)
 
 _model = SentenceTransformer(EMB_MODEL)
+_EMB_DIM = _model.get_sentence_embedding_dimension()  # 현재 모델의 임베딩 차원 (bge-m3=1024)
 
 
 def _embed(text: str) -> np.ndarray:
@@ -207,12 +208,23 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
     redis = await get_redis()
 
     try:
-        # 새 질문 임베딩
-        emb = _embed(question.content)
+        # 빈/기호-only 질문은 임베딩하지 않고 바로 신규 클러스터로 처리한다.
+        # (정규화 후 빈 문자열이면 무의미한 임베딩이 되어 오합류를 유발하므로)
+        emb = _embed(question.content) if TS.normalize(question.content) else None
 
         # 기존 클러스터 상태 로드
         raw = await redis.get(_clusters_key(room_id))
         clusters: List[Dict] = json.loads(raw) if raw else []
+
+        # 임베딩 모델 교체 등으로 기존 상태의 centroid 차원이 현재 모델과 다르면,
+        # 과거 상태를 신뢰할 수 없으므로 전체 클러스터를 리셋하고 새로 시작한다.
+        # (모델은 한 번에 교체되는 구조라 첫 클러스터만 확인하면 충분)
+        if clusters and len(clusters[0].get("centroid_emb", [])) != _EMB_DIM:
+            logger.warning(
+                f"[IncrementalCluster] roomId={room_id}: centroid 차원 불일치 "
+                f"({len(clusters[0].get('centroid_emb', []))} != {_EMB_DIM}) → 클러스터 상태 리셋"
+            )
+            clusters = []
 
         joined = False
         best_cos_idx = -1
@@ -220,12 +232,14 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
         training_representative: str | None = None
 
         # 전체 클러스터와 코사인 유사도 비교해서 가장 가까운 클러스터 탐색
-        for i, c in enumerate(clusters):
-            cent_emb = np.array(c["centroid_emb"], dtype=np.float32)
-            cos = float(emb @ cent_emb)
-            if cos > best_cos:
-                best_cos = cos
-                best_cos_idx = i
+        # (빈 질문 emb=None이면 비교를 건너뛰고 신규 클러스터로 생성)
+        if emb is not None:
+            for i, c in enumerate(clusters):
+                cent_emb = np.array(c["centroid_emb"], dtype=np.float32)
+                cos = float(emb @ cent_emb)
+                if cos > best_cos:
+                    best_cos = cos
+                    best_cos_idx = i
 
         if best_cos_idx >= 0 and best_cos >= EMB_THRESHOLD:
             # 코사인 유사도 기준 합류: 기존 중심과 새 임베딩을 가중 평균해 중심 안정화
@@ -237,16 +251,21 @@ async def add_question_to_clusters(room_id: str, question: QuestionInput) -> Clu
                 c["samples"].append(question.content)
             c["count"] += 1
             old_centroid = np.array(c["centroid_emb"], dtype=np.float32)
+            # 가중 평균. 단위벡터 평균이라 norm<1이 되지만 재정규화는 의도적으로 보류한다:
+            # 재정규화하면 임계값(0.55) 의미가 바뀌어 재튜닝이 필요하고, 현재 평가셋 F1도
+            # 이 동작 기준이라 Phase 2(회색지대 LLM) 후 임계값 튜닝과 묶어 처리한다.
             c["centroid_emb"] = ((old_centroid * (c["count"] - 1) + emb) / c["count"]).tolist()
             joined = True
 
         if not joined:
-            # 어느 클러스터에도 속하지 않으면 신규 클러스터 생성
+            # 어느 클러스터에도 속하지 않으면 신규 클러스터 생성.
+            # 빈 질문(emb=None)은 영벡터를 중심으로 둬 이후 코사인이 항상 0 → 다른 질문과 섞이지 않음.
+            centroid = emb if emb is not None else np.zeros(_EMB_DIM, dtype=np.float32)
             clusters.append({
                 "representative": question.content,
                 "representative_id": question.id,
                 "cluster_id": question.id,
-                "centroid_emb": emb.tolist(),
+                "centroid_emb": centroid.tolist(),
                 "member_ids": [question.id],
                 "slides": [question.slide],
                 "samples": [question.content],
