@@ -33,3 +33,6 @@
 - **임베딩 모델 교체 시 클러스터 상태(`room:*:clusters`) 초기화 필수.** centroid 차원이
   바뀌면 기존 상태와 코사인 계산 시 차원 불일치가 난다. (코드에도 차원 불일치 시 자동
   리셋 가드가 있지만, 배포 시 Redis 상태를 비우는 것을 기본 절차로 둔다.)
+- **`training_data.cosine` 컬럼 추가 시 기존 테이블은 수동 ALTER 필요.** `Base.metadata.create_all`
+  은 없는 테이블만 만들고 기존 테이블에 컬럼을 추가하지 않는다.
+  예: `ALTER TABLE training_data ADD COLUMN cosine FLOAT NULL;` (모델은 SQLAlchemy `Float`)
