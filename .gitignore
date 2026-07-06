@@ -195,3 +195,9 @@ secrets.json
 *.pem
 *.key
 *.crt
+# eval 측정 출력물
+eval/*.txt
+eval/__pycache__/
+
+# eval 측정 출력물 (JSON)
+eval/*.json
