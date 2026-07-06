@@ -1,0 +1,35 @@
+{"id": "q01", "slide": 1, "group": "material_share", "content": "발표 자료 공유해주실 수 있나요?"}
+{"id": "q02", "slide": 1, "group": "material_share", "content": "PPT 어디서 받을 수 있어요?"}
+{"id": "q03", "slide": 2, "group": "material_share", "content": "슬라이드 나중에 받아볼 수 있을까요?"}
+{"id": "q04", "slide": 2, "group": "material_share", "content": "발표 자료 좀 보내주시나요?"}
+{"id": "q05", "slide": 3, "group": "material_share", "content": "이 장표들 공유되나요?"}
+{"id": "q06", "slide": 3, "group": "practice_exp", "content": "이 기술 실무에서 써보셨나요?"}
+{"id": "q07", "slide": 4, "group": "practice_exp", "content": "실제 프로덕션에 적용한 사례가 있나요?"}
+{"id": "q08", "slide": 4, "group": "practice_exp", "content": "현업 도입 경험이 있으신가요?"}
+{"id": "q09", "slide": 5, "group": "practice_exp", "content": "회사에서 진짜로 돌려본 적 있어요?"}
+{"id": "q10", "slide": 5, "group": "performance", "content": "성능은 어느 정도 나오나요?"}
+{"id": "q11", "slide": 6, "group": "performance", "content": "처리 속도가 얼마나 빠른가요?"}
+{"id": "q12", "slide": 6, "group": "performance", "content": "레이턴시는 어느 정도인가요?"}
+{"id": "q13", "slide": 7, "group": "performance", "content": "많은 트래픽에서도 버티나요?"}
+{"id": "q14", "slide": 7, "group": "cost", "content": "비용은 얼마나 드나요?"}
+{"id": "q15", "slide": 8, "group": "cost", "content": "가격 정책이 어떻게 되나요?"}
+{"id": "q16", "slide": 8, "group": "cost", "content": "요금이 부담되지 않나요?"}
+{"id": "q17", "slide": 9, "group": "difficulty", "content": "배우기 어렵나요?"}
+{"id": "q18", "slide": 9, "group": "difficulty", "content": "입문자가 시작하기 괜찮을까요?"}
+{"id": "q19", "slide": 10, "group": "difficulty", "content": "러닝커브가 높은 편인가요?"}
+{"id": "q20", "slide": 10, "group": "comparison", "content": "기존 프레임워크 대비 장점이 뭔가요?"}
+{"id": "q21", "slide": 11, "group": "comparison", "content": "다른 라이브러리랑 비교하면 어떤가요?"}
+{"id": "q22", "slide": 11, "group": "comparison", "content": "경쟁 기술 대비 차별점이 있을까요?"}
+{"id": "q23", "slide": 12, "group": "security", "content": "보안 이슈는 없나요?"}
+{"id": "q24", "slide": 12, "group": "security", "content": "데이터 유출 위험은 어떻게 막나요?"}
+{"id": "q25", "slide": 13, "group": "career", "content": "이 분야 취업 시장은 어떤가요?"}
+{"id": "q26", "slide": 13, "group": "career", "content": "신입도 이걸로 취업할 수 있나요?"}
+{"id": "q27", "slide": 14, "group": "license", "content": "오픈소스인가요?"}
+{"id": "q28", "slide": 14, "group": "license", "content": "상업적으로 써도 되는 라이선스인가요?"}
+{"id": "q29", "slide": 15, "group": "singleton_age", "content": "발표자님 나이가 어떻게 되세요?"}
+{"id": "q30", "slide": 15, "group": "singleton_duration", "content": "이 프로젝트 만드는 데 얼마나 걸렸나요?"}
+{"id": "q31", "slide": 16, "group": "singleton_team", "content": "팀은 총 몇 명이었나요?"}
+{"id": "q32", "slide": 16, "group": "singleton_datastruct", "content": "자료구조나 알고리즘 공부도 병행해야 하나요?"}
+{"id": "q33", "slide": 17, "group": "singleton_pace", "content": "발표 속도가 좀 빨랐는데 앞부분 다시 설명 가능할까요?"}
+{"id": "q34", "slide": 17, "group": "singleton_regulation", "content": "정책적으로 규제 이슈는 없나요?"}
+{"id": "q35", "slide": 18, "group": "singleton_snack", "content": "혹시 오늘 간식 나눠주시나요?"}

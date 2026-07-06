@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o-mini"     # [추가] 기본 요약 모델
     SUMMARY_MAX_LINES: int = 3            # [추가] 요약 줄 수 (기본 3줄)
 
+    # ===== 군집화 회색지대 LLM 판정 설정 (Phase 2) =====
+    OPENAI_JUDGE_MODEL: str = "gpt-4o"       # 회색지대 "같은 질문?" 판정 모델 (요약 모델과 분리)
+    JUDGE_TIMEOUT_SECONDS: float = 3.0       # 판정 API 타임아웃(초). 초과 시 폴백(신규)
+
     DB_URL: Optional[str] = None           # 예) jdbc:mysql://host:3306/boini  또는  mysql://host:3306/boini
     DB_USERNAME: Optional[str] = None      # 예) root
     DB_PASSWORD: Optional[str] = None      # 예) secret
