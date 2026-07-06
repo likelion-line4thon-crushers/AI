@@ -1,6 +1,7 @@
 from datetime import datetime
+from typing import Optional
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import BigInteger, String, Boolean, DateTime, func
+from sqlalchemy import BigInteger, String, Boolean, DateTime, Float, func
 
 from models.max_slide_report import Base
 
@@ -13,4 +14,6 @@ class TrainingData(Base):
     question_a: Mapped[str] = mapped_column(String(1000), nullable=False)
     question_b: Mapped[str] = mapped_column(String(1000), nullable=False)
     is_similar: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # 회색지대 gpt-4o 판정 시의 코사인 유사도(0.50~0.62). 판정 없는 과거 행은 NULL.
+    cosine: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)

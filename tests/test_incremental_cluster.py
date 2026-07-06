@@ -140,3 +140,153 @@ async def test_two_member_cluster_is_exposed_in_response(svc):
     assert resp.uniqueGroups == 1
     assert len(resp.clusters) == 1
     assert resp.clusters[0].count == 2
+
+
+# ── 4) 회색지대 LLM 판정 (Phase 2) ───────────────────────────
+async def test_high_similarity_auto_joins_without_llm(svc):
+    """cosine >= EMB_HIGH 이면 LLM 판정 없이 자동 합류한다."""
+    room = "rh"
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "cat two"))  # cos ~0.99 >= 0.62
+
+    clusters = _stored_clusters(svc.redis, room)
+    assert len(clusters) == 1
+    assert clusters[0]["member_ids"] == ["q1", "q2"]
+    assert svc.judge_calls == []          # LLM 호출 안 함
+
+
+async def test_low_similarity_auto_new_without_llm(svc):
+    """cosine < EMB_LOW 이면 LLM 판정 없이 자동 신규가 된다."""
+    room = "rl"
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "dog"))     # cos 0 < 0.50
+
+    clusters = _stored_clusters(svc.redis, room)
+    assert len(clusters) == 2
+    assert svc.judge_calls == []          # LLM 호출 안 함
+
+
+async def test_gray_zone_calls_llm_and_joins_when_same(svc):
+    """회색지대(EMB_LOW~EMB_HIGH)에서 LLM이 '같다'면 합류한다."""
+    room = "rg1"
+    svc.judge_state["verdict"] = True     # LLM: 같다
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))  # cos ~0.55
+
+    assert len(svc.judge_calls) == 1      # 회색지대라 LLM 호출됨
+    clusters = _stored_clusters(svc.redis, room)
+    assert len(clusters) == 1
+    assert clusters[0]["member_ids"] == ["q1", "q2"]
+
+
+async def test_gray_zone_new_when_llm_says_different(svc):
+    """회색지대에서 LLM이 '다르다'면 신규가 된다."""
+    room = "rg2"
+    svc.judge_state["verdict"] = False    # LLM: 다르다
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))
+
+    assert len(svc.judge_calls) == 1
+    clusters = _stored_clusters(svc.redis, room)
+    assert len(clusters) == 2             # 합류하지 않고 신규
+
+
+async def test_gray_zone_falls_back_to_new_on_judge_failure(svc):
+    """회색지대에서 LLM 판정 실패(None: 타임아웃/에러/파싱실패)면 안전하게 신규로 폴백한다."""
+    room = "rg3"
+    svc.judge_state["verdict"] = None     # 판정 실패
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))
+
+    assert len(svc.judge_calls) == 1
+    clusters = _stored_clusters(svc.redis, room)
+    assert len(clusters) == 2             # 폴백 = 신규 (baseline 동작 유지)
+
+
+# ── 5) 회색지대 판정 쌍의 training_data 저장 ──────────────────
+async def test_gray_zone_same_saves_positive(svc):
+    """회색지대 '같다' → training_data에 positive(질문A/B, cosine 포함) 저장."""
+    room = "rt1"
+    svc.judge_state["verdict"] = True
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))
+
+    assert len(svc.training_saved) == 1
+    row = svc.training_saved[0]
+    assert row.is_similar is True
+    assert row.question_a == "borderline"   # 새 질문 content
+    assert row.question_b == "cat one"      # 비교한 대표 질문
+    assert row.cosine is not None and 0.50 <= row.cosine < 0.62
+
+
+async def test_gray_zone_different_saves_negative(svc):
+    """회색지대 '다르다' → training_data에 negative 저장 (신규가 되어도 저장됨)."""
+    room = "rt2"
+    svc.judge_state["verdict"] = False
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))
+
+    assert len(svc.training_saved) == 1
+    assert svc.training_saved[0].is_similar is False
+    assert svc.training_saved[0].cosine is not None
+
+
+async def test_gray_zone_fallback_saves_nothing(svc):
+    """회색지대 폴백(None) → 라벨이 없으니 training_data 저장 안 함."""
+    room = "rt3"
+    svc.judge_state["verdict"] = None
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))
+
+    assert svc.training_saved == []
+
+
+async def test_auto_join_saves_no_training_data(svc):
+    """자동 합류(>=0.62)는 gpt-4o 판정이 없으니 training_data 저장 안 함."""
+    room = "rt4"
+    svc.judge_state["verdict"] = True     # 설정돼 있어도 자동 경로라 호출 안 됨
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "cat two"))  # cos ~0.99
+
+    assert svc.judge_calls == []
+    assert svc.training_saved == []
+
+
+async def test_auto_new_saves_no_training_data(svc):
+    """자동 신규(<0.50)도 gpt-4o 판정이 없으니 training_data 저장 안 함."""
+    room = "rt5"
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "dog"))      # cos 0
+
+    assert svc.judge_calls == []
+    assert svc.training_saved == []
+
+
+async def test_duplicate_pair_saved_once(svc):
+    """이미 저장된 동일 (질문A, 질문B) 쌍은 다시 저장하지 않는다."""
+    room = "rt6"
+    # 동일 쌍을 미리 저장돼 있는 것으로 시드
+    svc.training_saved.append(svc.mod.TrainingData(
+        room_id=room, question_a="borderline", question_b="cat one",
+        is_similar=False, cosine=0.55,
+    ))
+    svc.judge_state["verdict"] = False
+    await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))  # 같은 쌍 재판정
+
+    assert len(svc.training_saved) == 1   # 중복 추가 없음
+
+
+async def test_duplicate_pair_reverse_order_saved_once(svc):
+    """(A,B)로 저장된 쌍은 순서가 뒤바뀐 (B,A)로 들어와도 중복 저장하지 않는다 (유사도 대칭)."""
+    room = "rt7"
+    # (question_a="borderline", question_b="cat one") 로 미리 저장돼 있음
+    svc.training_saved.append(svc.mod.TrainingData(
+        room_id=room, question_a="borderline", question_b="cat one",
+        is_similar=False, cosine=0.55,
+    ))
+    svc.judge_state["verdict"] = False
+    await svc.mod.add_question_to_clusters(room, _q("q1", "borderline"))  # 대표 질문 = "borderline"
+    await svc.mod.add_question_to_clusters(room, _q("q2", "cat one"))     # 저장 시도 = (A="cat one", B="borderline")
+
+    assert len(svc.training_saved) == 1   # 역순이어도 중복으로 걸러짐

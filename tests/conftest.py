@@ -26,8 +26,9 @@ class FakeSentenceTransformer:
     # 정규화(TS.normalize) 후의 텍스트를 키로 사용한다.
     VECTORS = {
         "cat one": [1.0, 0.0, 0.0, 0.0],
-        "cat two": [0.9, 0.1, 0.0, 0.0],   # cat one 과 코사인 ~0.99 → 합류
-        "dog": [0.0, 1.0, 0.0, 0.0],       # cat one 과 코사인 0 → 신규
+        "cat two": [0.9, 0.1, 0.0, 0.0],   # cat one 과 코사인 ~0.99 (>=0.62) → 자동 합류
+        "dog": [0.0, 1.0, 0.0, 0.0],       # cat one 과 코사인 0 (<0.50) → 자동 신규
+        "borderline": [0.55, 0.835, 0.0, 0.0],  # cat one 과 코사인 ~0.55 → 회색지대(LLM 판정)
         # 빈 문자열도 일부러 non-zero(= cat one 과 동일) 로 둔다. 실제 bge-m3 도 빈 입력에
         # 무의미한 non-zero 벡터를 주므로, 빈 입력 가드가 없으면 기존 클러스터에 잘못 합류한다.
         # 가드가 있으면 encode 자체가 호출되지 않아 이 벡터는 쓰이지 않는다.
@@ -92,26 +93,60 @@ class FakeAsyncRedis:
         self._hashes[key] = dict(mapping)
 
 
-# ── 3) Fake DB 세션 (합류 시 TrainingData 저장 경로) ──────────
+# ── 3) Fake DB 세션 (TrainingData 저장/중복확인 경로) ─────────
+class _FakeResult:
+    def __init__(self, matched):
+        self._matched = matched
+
+    def first(self):
+        return (1,) if self._matched else None
+
+
 class _FakeSession:
-    def __init__(self):
+    """커밋된 행을 store(공유 리스트)에 쌓고, dedup select 를 흉내낸다."""
+    def __init__(self, store):
+        self._store = store
         self.added = []
 
     def add(self, obj):
         self.added.append(obj)
 
     async def commit(self):
-        pass
+        self._store.extend(self.added)
+        self.added = []
+
+    async def execute(self, statement):
+        # _pair_exists 의 WHERE 를 '위치 기반'으로 충실히 흉내낸다.
+        # 바인드 파라미터를 (question_a_N, question_b_N) 브랜치로 복원해
+        # (row.question_a==a and row.question_b==b) 를 브랜치별로 평가한다.
+        # 이렇게 해야 순서민감/순서무관 쿼리를 실제와 동일하게 구분한다(집합 멤버십으로 뭉개지 않음).
+        try:
+            params = statement.compile().params
+        except Exception:
+            params = {}
+        branches = {}  # suffix -> {"a": .., "b": ..}
+        for key, val in params.items():
+            if key.startswith("question_a"):
+                branches.setdefault(key[len("question_a"):], {})["a"] = val
+            elif key.startswith("question_b"):
+                branches.setdefault(key[len("question_b"):], {})["b"] = val
+
+        def row_matches(r):
+            ra = getattr(r, "question_a", None)
+            rb = getattr(r, "question_b", None)
+            return any(
+                "a" in br and "b" in br and ra == br["a"] and rb == br["b"]
+                for br in branches.values()
+            )
+
+        matched = any(row_matches(r) for r in self._store)
+        return _FakeResult(matched)
 
 
-def make_fake_session_factory(recorder):
+def make_fake_session_factory(store):
     @contextlib.asynccontextmanager
     async def _cm():
-        sess = _FakeSession()
-        try:
-            yield sess
-        finally:
-            recorder.extend(sess.added)
+        yield _FakeSession(store)
 
     def _factory():
         return _cm()
@@ -140,7 +175,22 @@ def svc(monkeypatch):
     monkeypatch.setattr(mod, "get_redis", _get_redis)
     monkeypatch.setattr(mod, "async_session_factory", make_fake_session_factory(training_saved))
 
+    # gpt-4o 판정은 실제 호출 없이 mock. judge_state["verdict"] 로 반환값을 제어하고,
+    # judge_calls 로 호출 여부/인자를 검증한다. 기본 verdict=None(폴백=신규)이라
+    # 회색지대를 타지 않는 테스트에서 실수로 실제 API가 불릴 일이 없다.
+    judge_calls = []
+    judge_state = {"verdict": None}
+
+    async def _fake_judge(question_a, question_b):
+        judge_calls.append((question_a, question_b))
+        return judge_state["verdict"]
+
+    monkeypatch.setattr(mod, "judge_same", _fake_judge)
+
     # 모듈 레벨 _model 은 세션 내내 공유되므로 테스트 간 encode 기록을 격리한다.
     mod._model.encoded.clear()
 
-    return types.SimpleNamespace(mod=mod, redis=fake_redis, training_saved=training_saved)
+    return types.SimpleNamespace(
+        mod=mod, redis=fake_redis, training_saved=training_saved,
+        judge_calls=judge_calls, judge_state=judge_state,
+    )
