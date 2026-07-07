@@ -64,7 +64,9 @@ jobs:
             echo "헬스체크 시작..."
             SUCCESS=false
             for i in $(seq 1 24); do
-              if docker exec fastapi-container python -c "import urllib.request, sys; r = urllib.request.urlopen('http://localhost:8000/healthz', timeout=3); sys.exit(0 if r.status == 200 else 1)" 2>/dev/null; then
+              # localhost 은 컨테이너 안에서 IPv6(::1) 로 먼저 잡힐 수 있어 uvicorn(0.0.0.0=IPv4)에
+              # 닿지 못할 수 있으므로 127.0.0.1 로 고정한다. 2>/dev/null 을 제거해 실패 원인을 로그에 노출한다.
+              if docker exec fastapi-container python -c "import urllib.request, sys; r = urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3); sys.exit(0 if r.status == 200 else 1)"; then
                 echo "헬스체크 성공 (${i}번째 시도, 약 $((i*5))초 소요)"
                 SUCCESS=true
                 break
@@ -74,7 +76,13 @@ jobs:
             done
 
             if [ "$SUCCESS" != true ]; then
-              echo "헬스체크 실패 — 이전 버전으로 롤백합니다"
+              echo "헬스체크 실패 — 진단 정보 수집 후 롤백합니다"
+              # 컨테이너가 아예 안 떴는지 / 떴는데 /healthz만 안 되는지 구분용 (실패 시에만 출력)
+              echo "----- docker ps (fastapi) -----"
+              docker ps -a --filter name=fastapi-container --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' || true
+              echo "----- docker logs fastapi-container (마지막 30줄) -----"
+              docker logs --tail 30 fastapi-container || true
+              echo "-------------------------------"
               docker tag boini-fastapi:rollback boini-fastapi:latest
               docker compose up -d --no-build fastapi
               echo "롤백 완료. 배포는 실패로 처리됩니다."
