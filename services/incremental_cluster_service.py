@@ -16,16 +16,17 @@ from sentence_transformers import SentenceTransformer
 
 logger = logging.getLogger(__name__)
 
-EMB_MODEL = "BAAI/bge-m3"  # 다국어(한국어 포함) 임베딩. KR-SBERT 대비 평가셋 F1 0.056→0.716
-# 회색지대 판정 임계값 (실험으로 확정, bge-m3 기준):
+EMB_MODEL = "snunlp/KR-SBERT-V40K-klueNLI-augSTS"  # 한국어 SBERT. bge-m3(2.3GB)가 t3.small(2GB)에서
+# OOM으로 서버까지 죽어 전환. 정확도는 낮지만(평가셋 F1 0.852→0.600) 서버에서 확실히 구동됨.
+# 회색지대 판정 임계값 (실험으로 확정, KR-SBERT 기준 — 임베딩마다 코사인 스케일이 달라 재튜닝함):
 #   cosine >= EMB_HIGH            → 자동 합류
 #   EMB_LOW <= cosine < EMB_HIGH  → gpt-4o 판정 (같으면 합류, 아니면/실패면 신규)
 #   cosine < EMB_LOW              → 자동 신규
-EMB_HIGH = 0.62
-EMB_LOW = 0.50
+EMB_HIGH = 0.50
+EMB_LOW = 0.35
 
 _model = SentenceTransformer(EMB_MODEL)
-_EMB_DIM = _model.get_sentence_embedding_dimension()  # 현재 모델의 임베딩 차원 (bge-m3=1024)
+_EMB_DIM = _model.get_sentence_embedding_dimension()  # 현재 모델의 임베딩 차원 (KR-SBERT=768)
 
 
 def _embed(text: str) -> np.ndarray:
