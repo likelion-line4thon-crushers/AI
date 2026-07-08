@@ -33,6 +33,11 @@
 - **임베딩 모델 교체 시 클러스터 상태(`room:*:clusters`) 초기화 필수.** centroid 차원이
   바뀌면 기존 상태와 코사인 계산 시 차원 불일치가 난다. (코드에도 차원 불일치 시 자동
   리셋 가드가 있지만, 배포 시 Redis 상태를 비우는 것을 기본 절차로 둔다.)
+- **임베딩 KR-SBERT 전환(bge-m3 → `snunlp/KR-SBERT-V40K-klueNLI-augSTS`) 시 배포 절차:**
+  bge-m3(2.3GB)가 t3.small(RAM 2GB)에서 OOM으로 서버까지 죽어 KR-SBERT(~0.4GB)로 되돌림.
+  **차원이 1024→768로 바뀌므로 배포 시 Redis `room:*:clusters` 초기화 필수** (768 상태에
+  1024 centroid가 남으면 코사인 차원 불일치. 자동 리셋 가드가 있으나 배포 시 비우는 것을 기본으로).
+  회색지대 밴드도 KR-SBERT 스케일에 맞춰 재튜닝됨(EMB_HIGH=0.50 / EMB_LOW=0.35).
 - **`training_data.cosine` 컬럼 추가 시 기존 테이블은 수동 ALTER 필요.** `Base.metadata.create_all`
   은 없는 테이블만 만들고 기존 테이블에 컬럼을 추가하지 않는다.
   예: `ALTER TABLE training_data ADD COLUMN cosine FLOAT NULL;` (모델은 SQLAlchemy `Float`)
