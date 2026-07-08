@@ -18,11 +18,15 @@ def _stored_clusters(fake_redis, room):
 
 # ── 1) 차원 불일치 리셋 ──────────────────────────────────────
 async def test_dimension_mismatch_resets_stale_clusters(svc):
-    """옛 차원(3) centroid가 저장돼 있으면 새 질문(차원4) 처리 시 전체 리셋된다."""
+    """옛 차원(6) centroid가 저장돼 있으면 새 질문(현재 차원) 처리 시 전체 리셋된다.
+
+    실제 시나리오: bge-m3(1024) 상태가 Redis에 남은 채 KR-SBERT(768)로 교체되면
+    차원이 달라 코사인이 깨진다. 여기선 fake 차원(4)보다 큰 6차원 centroid로 그 잔재를 모사한다.
+    """
     room = "r1"
     old = {
         "representative": "old", "representative_id": "old", "cluster_id": "old",
-        "centroid_emb": [0.1, 0.2, 0.3],  # 옛 차원 3 (bge-m3 이전 상태 모사)
+        "centroid_emb": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],  # 옛 큰 차원(6) — bge-m3 1024 잔재 모사
         "member_ids": ["old"], "slides": [1], "samples": ["old"], "count": 1,
     }
     svc.redis._kv[f"room:{room}:clusters"] = json.dumps([old])
@@ -147,7 +151,7 @@ async def test_high_similarity_auto_joins_without_llm(svc):
     """cosine >= EMB_HIGH 이면 LLM 판정 없이 자동 합류한다."""
     room = "rh"
     await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
-    await svc.mod.add_question_to_clusters(room, _q("q2", "cat two"))  # cos ~0.99 >= 0.62
+    await svc.mod.add_question_to_clusters(room, _q("q2", "cat two"))  # cos ~0.99 >= 0.50
 
     clusters = _stored_clusters(svc.redis, room)
     assert len(clusters) == 1
@@ -159,7 +163,7 @@ async def test_low_similarity_auto_new_without_llm(svc):
     """cosine < EMB_LOW 이면 LLM 판정 없이 자동 신규가 된다."""
     room = "rl"
     await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
-    await svc.mod.add_question_to_clusters(room, _q("q2", "dog"))     # cos 0 < 0.50
+    await svc.mod.add_question_to_clusters(room, _q("q2", "dog"))     # cos 0 < 0.35
 
     clusters = _stored_clusters(svc.redis, room)
     assert len(clusters) == 2
@@ -171,7 +175,7 @@ async def test_gray_zone_calls_llm_and_joins_when_same(svc):
     room = "rg1"
     svc.judge_state["verdict"] = True     # LLM: 같다
     await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
-    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))  # cos ~0.55
+    await svc.mod.add_question_to_clusters(room, _q("q2", "borderline"))  # cos ~0.42
 
     assert len(svc.judge_calls) == 1      # 회색지대라 LLM 호출됨
     clusters = _stored_clusters(svc.redis, room)
@@ -216,7 +220,7 @@ async def test_gray_zone_same_saves_positive(svc):
     assert row.is_similar is True
     assert row.question_a == "borderline"   # 새 질문 content
     assert row.question_b == "cat one"      # 비교한 대표 질문
-    assert row.cosine is not None and 0.50 <= row.cosine < 0.62
+    assert row.cosine is not None and 0.35 <= row.cosine < 0.50
 
 
 async def test_gray_zone_different_saves_negative(svc):
@@ -242,7 +246,7 @@ async def test_gray_zone_fallback_saves_nothing(svc):
 
 
 async def test_auto_join_saves_no_training_data(svc):
-    """자동 합류(>=0.62)는 gpt-4o 판정이 없으니 training_data 저장 안 함."""
+    """자동 합류(>=0.50)는 gpt-4o 판정이 없으니 training_data 저장 안 함."""
     room = "rt4"
     svc.judge_state["verdict"] = True     # 설정돼 있어도 자동 경로라 호출 안 됨
     await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
@@ -253,7 +257,7 @@ async def test_auto_join_saves_no_training_data(svc):
 
 
 async def test_auto_new_saves_no_training_data(svc):
-    """자동 신규(<0.50)도 gpt-4o 판정이 없으니 training_data 저장 안 함."""
+    """자동 신규(<0.35)도 gpt-4o 판정이 없으니 training_data 저장 안 함."""
     room = "rt5"
     await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
     await svc.mod.add_question_to_clusters(room, _q("q2", "dog"))      # cos 0
@@ -268,7 +272,7 @@ async def test_duplicate_pair_saved_once(svc):
     # 동일 쌍을 미리 저장돼 있는 것으로 시드
     svc.training_saved.append(svc.mod.TrainingData(
         room_id=room, question_a="borderline", question_b="cat one",
-        is_similar=False, cosine=0.55,
+        is_similar=False, cosine=0.42,
     ))
     svc.judge_state["verdict"] = False
     await svc.mod.add_question_to_clusters(room, _q("q1", "cat one"))
@@ -283,7 +287,7 @@ async def test_duplicate_pair_reverse_order_saved_once(svc):
     # (question_a="borderline", question_b="cat one") 로 미리 저장돼 있음
     svc.training_saved.append(svc.mod.TrainingData(
         room_id=room, question_a="borderline", question_b="cat one",
-        is_similar=False, cosine=0.55,
+        is_similar=False, cosine=0.42,
     ))
     svc.judge_state["verdict"] = False
     await svc.mod.add_question_to_clusters(room, _q("q1", "borderline"))  # 대표 질문 = "borderline"

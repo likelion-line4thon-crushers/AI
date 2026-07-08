@@ -1,7 +1,7 @@
 """
 pytest 공통 픽스처 / mock.
 
-핵심: services.incremental_cluster_service 는 import 시점에 bge-m3 를 로드하고
+핵심: services.incremental_cluster_service 는 import 시점에 임베딩 모델(KR-SBERT)을 로드하고
 _EMB_DIM 을 읽는다. 그래서 서비스가 import 되기 "전에" sentence_transformers 를
 가짜 모듈로 선점(sys.modules)해 모델 다운로드/로드 없이 빠르게 테스트한다.
 
@@ -24,11 +24,12 @@ class FakeSentenceTransformer:
     """텍스트 → 고정 벡터. normalize_embeddings=True 면 단위벡터로 정규화."""
     DIM = 4
     # 정규화(TS.normalize) 후의 텍스트를 키로 사용한다.
+    # 코사인 구간은 현재 밴드(EMB_HIGH=0.50 / EMB_LOW=0.35) 기준으로 배치한다.
     VECTORS = {
         "cat one": [1.0, 0.0, 0.0, 0.0],
-        "cat two": [0.9, 0.1, 0.0, 0.0],   # cat one 과 코사인 ~0.99 (>=0.62) → 자동 합류
-        "dog": [0.0, 1.0, 0.0, 0.0],       # cat one 과 코사인 0 (<0.50) → 자동 신규
-        "borderline": [0.55, 0.835, 0.0, 0.0],  # cat one 과 코사인 ~0.55 → 회색지대(LLM 판정)
+        "cat two": [0.9, 0.1, 0.0, 0.0],   # cat one 과 코사인 ~0.99 (>=0.50) → 자동 합류
+        "dog": [0.0, 1.0, 0.0, 0.0],       # cat one 과 코사인 0 (<0.35) → 자동 신규
+        "borderline": [0.42, 0.9075, 0.0, 0.0],  # cat one 과 코사인 ~0.42 → 회색지대(0.35~0.50, LLM 판정)
         # 빈 문자열도 일부러 non-zero(= cat one 과 동일) 로 둔다. 실제 bge-m3 도 빈 입력에
         # 무의미한 non-zero 벡터를 주므로, 빈 입력 가드가 없으면 기존 클러스터에 잘못 합류한다.
         # 가드가 있으면 encode 자체가 호출되지 않아 이 벡터는 쓰이지 않는다.
